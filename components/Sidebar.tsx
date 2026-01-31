@@ -7,6 +7,8 @@ import {
   PackageSearch,
   LogOut,
   X,
+  FileText,
+  AlertCircle,
 } from "lucide-react";
 
 interface NavItem {
@@ -42,6 +44,16 @@ const navItems: NavItem[] = [
     label: "Manage Products",
     icon: <PackageSearch className="w-5 h-5" />,
   },
+  {
+    id: "audit-logs",
+    label: "Audit Logs",
+    icon: <FileText className="w-5 h-5" />,
+  },
+  {
+    id: "error-logs",
+    label: "Error Logs",
+    icon: <AlertCircle className="w-5 h-5" />,
+  },
 ];
 
 export default function Sidebar({ currentPage, onPageChange }: SidebarProps) {
@@ -50,7 +62,11 @@ export default function Sidebar({ currentPage, onPageChange }: SidebarProps) {
       <div className="p-6 border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 flex items-center justify-center shrink-0">
-            <img src="/logo.svg" alt="J Logo" className="w-full h-full object-contain drop-shadow-sm" />
+            <img
+              src="/logo.svg"
+              alt="J Logo"
+              className="w-full h-full object-contain drop-shadow-sm"
+            />
           </div>
           <div>
             <h1 className="text-lg font-black text-foreground tracking-tight">
