@@ -1,5 +1,5 @@
-export const BASE_URL = "http://10.10.13.16:8700/api";
-
+export const BASE_URL = "https://fb4d-103-186-20-3.ngrok-free.app/api";
+// export const BASE_URL = "http://10.10.13.16:8700/api";
 const getAccessToken = () => {
   if (typeof window !== "undefined") {
     return localStorage.getItem("access_token");
@@ -24,6 +24,7 @@ const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
   const headers = {
     ...(isFormData ? {} : { "Content-Type": "application/json" }),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    "ngrok-skip-browser-warning": "true",
     ...options.headers,
   };
 
@@ -49,6 +50,7 @@ export const authApi = {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "ngrok-skip-browser-warning": "true"
       },
       body: JSON.stringify(data),
     });
@@ -60,6 +62,7 @@ export const authApi = {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "ngrok-skip-browser-warning": "true",
       },
       body: JSON.stringify({ email }),
     });
@@ -71,6 +74,7 @@ export const authApi = {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "ngrok-skip-browser-warning": "true",
       },
       body: JSON.stringify({ email, otp }),
     });
@@ -82,6 +86,7 @@ export const authApi = {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "ngrok-skip-browser-warning": "true",
       },
       body: JSON.stringify({ email }),
     });
@@ -93,6 +98,7 @@ export const authApi = {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "ngrok-skip-browser-warning": "true",
       },
       body: JSON.stringify(data),
     });
