@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Table,
   TableBody,
@@ -26,107 +26,85 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, Search, Download, AlertCircle } from "lucide-react";
+import { Search, Download, Loader2, ChevronLeft, ChevronRight, AlertCircle, AlertTriangle, Eye, Terminal } from "lucide-react";
+import { authApi } from "@/lib/auth-service";
+import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+
+interface RequestLog {
+  id: number;
+  endpoint: string;
+  method: string;
+  ip_address: string;
+  user_id: string;
+  response_code: number;
+  execution_time_ms: number;
+  timestamp: string;
+}
 
 interface ErrorLog {
-  id: string;
+  id: number;
+  request_log: RequestLog;
+  error_message: string;
+  traceback: string;
+  severity: string;
+  error_code: string;
   timestamp: string;
-  errorCode: string;
-  severity: "critical" | "warning" | "info";
-  message: string;
-  module: string;
-  stackTrace?: string;
-  affectedUsers?: number;
+}
+
+interface Summary {
+  total_errors: number;
+  critical_errors: number;
+  warnings: number;
+  affected_users: number;
+  time_period_hours: number;
 }
 
 const ErrorLogs: React.FC = () => {
+  const [logs, setLogs] = useState<ErrorLog[]>([]);
+  const [summary, setSummary] = useState<Summary | null>(null);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [severityFilter, setSeverityFilter] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [selectedError, setSelectedError] = useState<ErrorLog | null>(null);
 
-  // Mock data - replace with actual API call
-  const errorLogs: ErrorLog[] = [
-    {
-      id: "1",
-      timestamp: "2025-01-31 15:45:22",
-      errorCode: "DB_CONNECTION_001",
-      severity: "critical",
-      message: "Database connection timeout",
-      module: "Database Service",
-      stackTrace:
-        "at connectDB (database.ts:45) at initializePool (database.ts:120)",
-      affectedUsers: 127,
-    },
-    {
-      id: "2",
-      timestamp: "2025-01-31 15:30:10",
-      errorCode: "API_TIMEOUT_002",
-      severity: "warning",
-      message: "API response time exceeded 5 seconds",
-      module: "Product Service",
-      affectedUsers: 23,
-    },
-    {
-      id: "3",
-      timestamp: "2025-01-31 14:20:45",
-      errorCode: "AUTH_INVALID_TOKEN",
-      severity: "warning",
-      message: "Invalid JWT token detected",
-      module: "Authentication",
-      stackTrace: "at verifyToken (auth.ts:78) at middleware (auth.ts:156)",
-      affectedUsers: 3,
-    },
-    {
-      id: "4",
-      timestamp: "2025-01-31 13:05:30",
-      errorCode: "DISK_SPACE_LOW",
-      severity: "critical",
-      message: "Disk space running critically low (< 5% available)",
-      module: "System Monitor",
-      affectedUsers: 0,
-    },
-    {
-      id: "5",
-      timestamp: "2025-01-31 12:30:15",
-      errorCode: "PAYMENT_GATEWAY_ERR",
-      severity: "critical",
-      message: "Payment gateway unavailable",
-      module: "Payment Service",
-      stackTrace:
-        "at processPayment (payment.ts:234) at checkout (cart.ts:456)",
-      affectedUsers: 45,
-    },
-    {
-      id: "6",
-      timestamp: "2025-01-31 11:15:00",
-      errorCode: "CACHE_FLUSH_INFO",
-      severity: "info",
-      message: "Redis cache flushed successfully",
-      module: "Cache Manager",
-      affectedUsers: 0,
-    },
-    {
-      id: "7",
-      timestamp: "2025-01-31 10:00:22",
-      errorCode: "EMAIL_SEND_FAILED",
-      severity: "warning",
-      message: "Failed to send notification email",
-      module: "Email Service",
-      stackTrace:
-        "at sendEmail (mailer.ts:89) at notifyUser (notifications.ts:234)",
-      affectedUsers: 12,
-    },
-  ];
+  const fetchLogs = async (page = 1) => {
+    try {
+      setLoading(true);
+      const data = await authApi.getErrorLogs(page);
+      setLogs(data.results || []);
+      setSummary(data.summary || null);
+      if (data.pagination) {
+        setTotalPages(Math.ceil(data.pagination.count / 10)); // Assuming 10 per page
+      }
+    } catch (error) {
+      console.error("Error fetching error logs:", error);
+      toast.error("Failed to load error logs");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const filteredLogs = errorLogs.filter((log) => {
+  useEffect(() => {
+    fetchLogs(currentPage);
+  }, [currentPage]);
+
+  const filteredLogs = logs.filter((log) => {
     const matchesSearch =
-      log.errorCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      log.message.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      log.module.toLowerCase().includes(searchTerm.toLowerCase());
+      log.error_message.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      log.error_code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      log.request_log.endpoint.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchesFilter =
-      severityFilter === "all" || log.severity === severityFilter;
+    const matchesFilter = severityFilter === "all" || log.severity === severityFilter;
 
     return matchesSearch && matchesFilter;
   });
@@ -138,16 +116,20 @@ const ErrorLogs: React.FC = () => {
         "Error Code",
         "Severity",
         "Message",
-        "Module",
-        "Affected Users",
+        "Endpoint",
+        "Method",
+        "User ID",
+        "IP Address",
       ],
       ...filteredLogs.map((log) => [
         log.timestamp,
-        log.errorCode,
+        log.error_code,
         log.severity,
-        log.message,
-        log.module,
-        log.affectedUsers || 0,
+        log.error_message,
+        log.request_log.endpoint,
+        log.request_log.method,
+        log.request_log.user_id,
+        log.request_log.ip_address,
       ]),
     ]
       .map((row) => row.map((cell) => `"${cell}"`).join(","))
@@ -161,258 +143,340 @@ const ErrorLogs: React.FC = () => {
     a.click();
   };
 
-  const getSeverityColor = (severity: string) => {
-    switch (severity) {
-      case "critical":
-        return "destructive";
-      case "warning":
-        return "secondary";
-      case "info":
-        return "default";
+  const getSeverityBadge = (severity: string) => {
+    switch (severity.toLowerCase()) {
+      case 'critical':
+      case 'error':
+        return <Badge variant="destructive" className="font-black">CRITICAL</Badge>;
+      case 'warning':
+        return <Badge className="bg-orange-500 hover:bg-orange-600 font-black text-white">WARNING</Badge>;
+      case 'info':
+        return <Badge variant="secondary" className="font-black uppercase">INFO</Badge>;
       default:
-        return "default";
+        return <Badge variant="outline" className="font-black uppercase">{severity}</Badge>;
     }
   };
 
-  const criticalErrors = errorLogs.filter(
-    (log) => log.severity === "critical",
-  ).length;
-  const warningErrors = errorLogs.filter(
-    (log) => log.severity === "warning",
-  ).length;
-  const totalAffectedUsers = [
-    ...new Set(errorLogs.flatMap((log) => Array(log.affectedUsers || 0))),
-  ].length;
+  const criticalCount = summary?.critical_errors || 0;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Error Logs</h1>
-        <p className="text-gray-500 mt-2">
-          Monitor system health and error tracking
-        </p>
+    <div className="space-y-6 max-w-[1600px] mx-auto pb-10">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-black tracking-tight text-foreground flex items-center gap-3">
+            <div className="p-2 bg-destructive/10 rounded-lg">
+              <AlertTriangle className="w-8 h-8 text-destructive" />
+            </div>
+            System Error Analytics
+          </h1>
+          <p className="text-muted-foreground mt-1 font-medium">
+            Deep diagnostic tracking and traceback analysis
+          </p>
+        </div>
+        <Button onClick={handleExport} variant="outline" className="gap-2 font-bold h-11 px-6 border-2 hover:bg-muted transition-all">
+          <Download className="h-4 w-4" />
+          Export Diagnostic CSV
+        </Button>
       </div>
 
-      {/* Critical Alert */}
-      {criticalErrors > 0 && (
-        <Alert variant="destructive">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertDescription>
-            You have {criticalErrors} critical error(s) that require immediate
-            attention!
+      {criticalCount > 0 && (
+        <Alert variant="destructive" className="border-4 shadow-xl bg-destructive/5 text-destructive animate-pulse border-destructive/50">
+          <AlertCircle className="h-6 w-6" />
+          <AlertDescription className="font-black text-lg ml-2">
+            CRITICAL INCIDENT: {criticalCount} high-severity errors detected in the last {summary?.time_period_hours} hours.
           </AlertDescription>
         </Alert>
       )}
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Total Errors</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{errorLogs.length}</div>
-            <p className="text-xs text-gray-500 mt-1">Since last 24 hours</p>
-          </CardContent>
-        </Card>
+      {/* Summary Stats */}
+      {summary && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card className="border-2 shadow-sm relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-24 h-24 -mr-8 -mt-8 bg-zinc-500/5 rounded-full" />
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-bold text-muted-foreground uppercase tracking-widest leading-none">Total Errors</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-black text-foreground">{summary.total_errors}</div>
+              <p className="text-xs text-muted-foreground mt-1 font-bold">Past {summary.time_period_hours}H Period</p>
+            </CardContent>
+          </Card>
+          <Card className="border-2 shadow-sm relative overflow-hidden group border-destructive/20 bg-destructive/[0.02]">
+            <div className="absolute top-0 right-0 w-24 h-24 -mr-8 -mt-8 bg-destructive/10 rounded-full" />
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-bold text-destructive uppercase tracking-widest leading-none">Critical</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-black text-destructive">{summary.critical_errors}</div>
+              <p className="text-xs text-destructive/70 mt-1 font-bold">Requires Action</p>
+            </CardContent>
+          </Card>
+          <Card className="border-2 shadow-sm relative overflow-hidden group border-orange-200 bg-orange-50/30">
+            <div className="absolute top-0 right-0 w-24 h-24 -mr-8 -mt-8 bg-orange-500/5 rounded-full" />
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-bold text-orange-600 uppercase tracking-widest leading-none">Warnings</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-black text-orange-600">{summary.warnings}</div>
+              <p className="text-xs text-orange-600/70 mt-1 font-bold">Non-Breaking Issues</p>
+            </CardContent>
+          </Card>
+          <Card className="border-2 shadow-sm relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-24 h-24 -mr-8 -mt-8 bg-blue-500/5 rounded-full" />
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-bold text-blue-600 uppercase tracking-widest leading-none">Affected Users</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-black text-blue-600">{summary.affected_users}</div>
+              <p className="text-xs text-blue-600/70 mt-1 font-bold">User Impact Reach</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
-        <Card className="border-red-200 bg-red-50">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-red-900">
-              Critical
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">
-              {criticalErrors}
+      <Card className="border-2 shadow-md overflow-hidden">
+        <CardHeader className="border-b bg-muted/30">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <CardTitle className="text-xl font-black">Error Diagnostic Feed</CardTitle>
+              <CardDescription className="font-medium text-muted-foreground italic">Comprehensive system health log and request tracking</CardDescription>
             </div>
-            <p className="text-xs text-red-600 mt-1">Requires action</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-yellow-200 bg-yellow-50">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-yellow-900">
-              Warnings
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">
-              {warningErrors}
+            <div className="flex gap-3 flex-col sm:flex-row">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Filter by message, code, endpoint..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 h-11 w-full sm:w-[320px] border-2 focus-visible:ring-primary"
+                />
+              </div>
+              <Select value={severityFilter} onValueChange={setSeverityFilter}>
+                <SelectTrigger className="w-full sm:w-[150px] h-11 border-2 font-bold">
+                  <SelectValue placeholder="Severity" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Severity</SelectItem>
+                  <SelectItem value="critical">Critical</SelectItem>
+                  <SelectItem value="warning">Warning</SelectItem>
+                  <SelectItem value="info">Info</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            <p className="text-xs text-yellow-600 mt-1">Monitor closely</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">
-              Affected Users
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {errorLogs.reduce(
-                (sum, log) => sum + (log.affectedUsers || 0),
-                0,
-              )}
-            </div>
-            <p className="text-xs text-gray-500 mt-1">Impacted today</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Error Log Details</CardTitle>
-          <CardDescription>System health and error tracking</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Filters */}
-          <div className="flex gap-4 flex-col sm:flex-row">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-              <Input
-                placeholder="Search by error code, message, or module..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            <Select value={severityFilter} onValueChange={setSeverityFilter}>
-              <SelectTrigger className="w-full sm:w-48">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Severity</SelectItem>
-                <SelectItem value="critical">Critical</SelectItem>
-                <SelectItem value="warning">Warning</SelectItem>
-                <SelectItem value="info">Info</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button onClick={handleExport} variant="outline" className="gap-2">
-              <Download className="h-4 w-4" />
-              Export
-            </Button>
           </div>
-
-          {/* Table */}
-          <div className="border rounded-lg overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Timestamp</TableHead>
-                  <TableHead>Error Code</TableHead>
-                  <TableHead>Severity</TableHead>
-                  <TableHead>Message</TableHead>
-                  <TableHead>Module</TableHead>
-                  <TableHead>Affected Users</TableHead>
-                  <TableHead>Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredLogs.length > 0 ? (
-                  filteredLogs.map((log) => (
-                    <TableRow
-                      key={log.id}
-                      className={log.severity === "critical" ? "bg-red-50" : ""}
-                    >
-                      <TableCell className="text-sm">{log.timestamp}</TableCell>
-                      <TableCell className="font-mono text-sm font-medium">
-                        {log.errorCode}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={getSeverityColor(log.severity)}>
-                          {log.severity}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-sm">{log.message}</TableCell>
-                      <TableCell className="text-sm">{log.module}</TableCell>
-                      <TableCell className="text-sm font-medium">
-                        {log.affectedUsers ? `${log.affectedUsers} users` : "-"}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setSelectedError(log)}
-                          className="gap-2"
-                        >
-                          <AlertCircle className="h-4 w-4" />
-                          Details
-                        </Button>
+        </CardHeader>
+        <CardContent className="p-0">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-24 gap-4 bg-muted/10">
+              <Loader2 className="w-12 h-12 text-primary animate-spin" />
+              <p className="text-muted-foreground font-black tracking-tighter uppercase animate-pulse">Initializing Diagnostic Engine...</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader className="bg-muted/50">
+                  <TableRow className="hover:bg-transparent border-b-2">
+                    <TableHead className="font-black text-foreground py-4 text-xs uppercase tracking-tighter">Event Time</TableHead>
+                    <TableHead className="font-black text-foreground text-xs uppercase tracking-tighter">Code</TableHead>
+                    <TableHead className="font-black text-foreground text-xs uppercase tracking-tighter text-center">Severity</TableHead>
+                    <TableHead className="font-black text-foreground text-xs uppercase tracking-tighter">Request Endpoint</TableHead>
+                    <TableHead className="font-black text-foreground text-xs uppercase tracking-tighter">Summary</TableHead>
+                    <TableHead className="font-black text-foreground text-xs uppercase tracking-tighter">Impact Info</TableHead>
+                    <TableHead className="font-black text-foreground text-xs uppercase tracking-tighter text-right">View</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredLogs.length > 0 ? (
+                    filteredLogs.map((log) => (
+                      <TableRow key={log.id} className={`hover:bg-muted/30 transition-colors ${log.severity.toLowerCase() === 'critical' ? 'bg-destructive/[0.03]' : ''}`}>
+                        <TableCell className="text-[11px] font-mono font-bold text-muted-foreground whitespace-nowrap">
+                          {new Date(log.timestamp).toLocaleString()}
+                        </TableCell>
+                        <TableCell>
+                          <code className="bg-muted px-1.5 py-0.5 rounded text-[11px] font-bold border leading-none">
+                            {log.error_code}
+                          </code>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {getSeverityBadge(log.severity)}
+                        </TableCell>
+                        <TableCell className="font-bold">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="text-[10px] py-0 px-1 border-primary/30 text-primary">{log.request_log.method}</Badge>
+                            <span className="text-sm truncate max-w-[150px]" title={log.request_log.endpoint}>{log.request_log.endpoint}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="max-w-md">
+                          <p className={`text-sm font-medium line-clamp-1 ${log.severity.toLowerCase() === 'critical' ? 'text-destructive' : 'text-foreground'}`} title={log.error_message}>
+                            {log.error_message}
+                          </p>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-[10px] font-bold text-muted-foreground uppercase leading-none">User: {log.request_log.user_id}</span>
+                            <span className="text-[10px] font-mono text-muted-foreground/70 uppercase leading-none">IP: {log.request_log.ip_address}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setSelectedError(log)}
+                            className="h-8 w-8 hover:bg-primary/10 hover:text-primary transition-colors"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-20 bg-muted/5">
+                        <div className="flex flex-col items-center gap-3">
+                           <div className="p-5 bg-muted rounded-full">
+                             <Search className="w-10 h-10 text-muted-foreground" />
+                           </div>
+                           <p className="text-xl font-black text-foreground italic">Diagnostic Search Empty</p>
+                           <p className="text-muted-foreground font-medium">System records showing no matches for this configuration</p>
+                        </div>
                       </TableCell>
                     </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell
-                      colSpan={7}
-                      className="text-center py-8 text-gray-500"
-                    >
-                      No errors found matching your criteria
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Error Details Modal */}
-      {selectedError && (
-        <Card className="border-blue-200 bg-blue-50">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>Error Details</CardTitle>
-              <Button variant="ghost" onClick={() => setSelectedError(null)}>
-                ×
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-gray-600">Error Code</p>
-                <p className="font-mono font-medium">
-                  {selectedError.errorCode}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Severity</p>
-                <Badge variant={getSeverityColor(selectedError.severity)}>
-                  {selectedError.severity}
-                </Badge>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Timestamp</p>
-                <p className="text-sm">{selectedError.timestamp}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Module</p>
-                <p className="text-sm">{selectedError.module}</p>
-              </div>
-            </div>
-
-            <div>
-              <p className="text-sm text-gray-600 mb-2">Message</p>
-              <p className="text-sm bg-white p-3 rounded border">
-                {selectedError.message}
-              </p>
-            </div>
-
-            {selectedError.stackTrace && (
-              <div>
-                <p className="text-sm text-gray-600 mb-2">Stack Trace</p>
-                <pre className="text-xs bg-gray-900 text-green-400 p-3 rounded overflow-x-auto">
-                  {selectedError.stackTrace}
-                </pre>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+      {/* Pagination */}
+      {!loading && totalPages > 1 && (
+        <div className="flex items-center justify-between bg-card border-2 p-4 rounded-xl shadow-sm">
+          <p className="text-sm text-muted-foreground font-bold">
+            Diagnostics Page <span className="text-foreground">{currentPage}</span> of <span className="text-foreground">{totalPages}</span>
+          </p>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={currentPage === 1}
+              onClick={() => setCurrentPage(prev => prev - 1)}
+              className="gap-1 font-bold h-10 px-4 border-2 transition-all hover:bg-muted"
+            >
+              <ChevronLeft className="h-4 w-4" /> Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={currentPage === totalPages}
+              onClick={() => setCurrentPage(prev => prev + 1)}
+              className="gap-1 font-bold h-10 px-4 border-2 transition-all hover:bg-muted"
+            >
+              Next <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
       )}
+
+      {/* Error Detail Dialog */}
+      <Dialog open={!!selectedError} onOpenChange={() => setSelectedError(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto border-4 shadow-2xl">
+          <DialogHeader className="border-b pb-4">
+            <div className="flex items-start justify-between">
+              <div>
+                <DialogTitle className="text-2xl font-black flex items-center gap-3 mb-1">
+                  {selectedError && getSeverityBadge(selectedError.severity)}
+                  Diagnostic Trace: #{selectedError?.id}
+                </DialogTitle>
+                <DialogDescription className="font-bold text-muted-foreground italic">
+                  Full system state at the time of event capture
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          {selectedError && (
+            <div className="space-y-6 pt-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-4 bg-muted/30 rounded-lg border-2">
+                  <p className="text-[10px] font-black uppercase text-muted-foreground mb-1 leading-none">Response Information</p>
+                  <p className="text-lg font-black leading-tight mb-1">HTTP {selectedError.request_log.response_code}</p>
+                  <code className="text-xs font-bold text-primary">{selectedError.error_code}</code>
+                </div>
+                <div className="p-4 bg-muted/30 rounded-lg border-2">
+                  <p className="text-[10px] font-black uppercase text-muted-foreground mb-1 leading-none">Execution Metrics</p>
+                  <p className="text-lg font-black leading-tight mb-1">{selectedError.request_log.execution_time_ms.toFixed(2)} ms</p>
+                  <p className="text-xs font-bold text-muted-foreground">{selectedError.request_log.method} Method</p>
+                </div>
+                <div className="p-4 bg-muted/30 rounded-lg border-2">
+                  <p className="text-[10px] font-black uppercase text-muted-foreground mb-1 leading-none">Captured On</p>
+                  <p className="text-sm font-black leading-tight mb-1">{new Date(selectedError.timestamp).toLocaleString()}</p>
+                  <p className="text-[10px] font-mono text-muted-foreground">{selectedError.timestamp}</p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="text-sm font-black uppercase tracking-widest flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-primary" /> Error Message
+                </h3>
+                <div className="p-4 bg-destructive/5 border-2 border-destructive/20 rounded-lg">
+                  <p className="text-sm font-bold text-destructive leading-relaxed">
+                    {selectedError.error_message}
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="text-sm font-black uppercase tracking-widest flex items-center gap-2">
+                  <Terminal className="w-4 h-4 text-primary" /> Traceback Analysis
+                </h3>
+                <div className="group relative">
+                   <pre className="p-4 bg-zinc-950 text-emerald-400 font-mono text-[11px] leading-relaxed rounded-lg border-2 overflow-x-auto max-h-[400px] scrollbar-thin scrollbar-thumb-zinc-700">
+                    {selectedError.traceback}
+                  </pre>
+                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button 
+                      variant="secondary" 
+                      size="sm" 
+                      className="h-7 text-[10px] font-black"
+                      onClick={() => {
+                        navigator.clipboard.writeText(selectedError.traceback);
+                        toast.success("Traceback copied to clipboard");
+                      }}
+                    >
+                      COPY LOG
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="text-sm font-black uppercase tracking-widest flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 text-primary" /> Request Environment
+                </h3>
+                <div className="grid grid-cols-2 gap-4 text-xs">
+                   <div className="flex flex-col gap-1 p-3 bg-muted/50 rounded border italic">
+                      <span className="font-black text-muted-foreground uppercase text-[9px]">Endpoint</span>
+                      <span className="font-bold truncate">{selectedError.request_log.endpoint}</span>
+                   </div>
+                   <div className="flex flex-col gap-1 p-3 bg-muted/50 rounded border italic">
+                      <span className="font-black text-muted-foreground uppercase text-[9px]">IP Address</span>
+                      <span className="font-bold">{selectedError.request_log.ip_address}</span>
+                   </div>
+                   <div className="flex flex-col gap-1 p-3 bg-muted/50 rounded border italic">
+                      <span className="font-black text-muted-foreground uppercase text-[9px]">User Context</span>
+                      <span className="font-bold">{selectedError.request_log.user_id}</span>
+                   </div>
+                   <div className="flex flex-col gap-1 p-3 bg-muted/50 rounded border italic">
+                      <span className="font-black text-muted-foreground uppercase text-[9px]">Log Identity</span>
+                      <span className="font-bold">ID: {selectedError.id} / RID: {selectedError.request_log.id}</span>
+                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

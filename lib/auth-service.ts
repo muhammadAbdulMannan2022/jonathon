@@ -19,8 +19,10 @@ const handleUnauthorized = () => {
 
 const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
   const token = getAccessToken();
+  const isFormData = options.body instanceof FormData;
+  
   const headers = {
-    "Content-Type": "application/json",
+    ...(isFormData ? {} : { "Content-Type": "application/json" }),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...options.headers,
   };
@@ -32,7 +34,13 @@ const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
     throw new Error("Unauthorized");
   }
 
-  return response.json();
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw data;
+  }
+
+  return data;
 };
 
 export const authApi = {
@@ -115,16 +123,28 @@ export const authApi = {
   rejectProduct: (id: number) => 
     fetchWithAuth(`${BASE_URL}/admin/product/${id}/reject/`, { method: "PATCH" }),
 
+  getOwnProducts: (page = 1) => 
+    fetchWithAuth(`${BASE_URL}/admin/own-products-list/?page=${page}`),
+
+  updateProduct: (id: number, data: any) => 
+    fetchWithAuth(`${BASE_URL}/admin/product/${id}/update/`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+
+  deleteProduct: (id: number) => 
+    fetchWithAuth(`${BASE_URL}/admin/product/${id}/update/`, { method: "DELETE" }),
+
   createInStoreProduct: (data: any) => 
     fetchWithAuth(`${BASE_URL}/admin/product/instore-create/`, {
       method: "POST",
-      body: JSON.stringify(data),
+      body: data instanceof FormData ? data : JSON.stringify(data),
     }),
 
   createOnlineProduct: (data: any) => 
     fetchWithAuth(`${BASE_URL}/admin/product/online-create/`, {
       method: "POST",
-      body: JSON.stringify(data),
+      body: data instanceof FormData ? data : JSON.stringify(data),
     }),
 
   // User Management APIs
@@ -153,4 +173,12 @@ export const authApi = {
       method: "POST",
       body: JSON.stringify({ user_id: id }),
     }),
+
+  // Category & Store APIs
+  getCategories: () => fetchWithAuth(`${BASE_URL}/category/list/`),
+  getStores: (page = 1) => fetchWithAuth(`${BASE_URL}/store/list/?page=${page}`),
+
+  // Log APIs
+  getAuditLogs: (page = 1) => fetchWithAuth(`${BASE_URL}/admin/audit-logs/?page=${page}`),
+  getErrorLogs: (page = 1) => fetchWithAuth(`${BASE_URL}/admin/error-logs/?page=${page}`),
 };

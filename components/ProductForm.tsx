@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { authApi } from '@/lib/auth-service';
 import { toast } from 'sonner';
 import BasicInformation from './form-sections/BasicInformation';
@@ -29,29 +29,11 @@ interface FormData {
   quantityAvailable: string;
   locationNotes: string;
   uploadedImage: string | null;
+  uploadedFile: File | null;
   additionalComments: string;
 }
 
-const CATEGORIES = [
-  { id: 1, name: 'Electronics' },
-  { id: 2, name: 'Gaming' },
-  { id: 3, name: 'Shoes' },
-  { id: 4, name: 'Clothing' },
-  { id: 5, name: 'Home' },
-  { id: 6, name: 'Sports' },
-  { id: 7, name: 'Beauty' },
-  { id: 8, name: 'Books' },
-];
 
-const STORES = [
-  { id: 1, name: 'Amazon' },
-  { id: 2, name: 'Best Buy' },
-  { id: 3, name: 'Target' },
-  { id: 4, name: 'Foot Locker' },
-  { id: 5, name: 'Apple' },
-  { id: 6, name: 'Nike' },
-  { id: 7, name: 'GameStop' },
-];
 
 const INITIAL_DATA: FormData = {
   storeType: 'online',
@@ -71,13 +53,39 @@ const INITIAL_DATA: FormData = {
   quantityAvailable: '',
   locationNotes: '',
   uploadedImage: null,
+  uploadedFile: null,
   additionalComments: '',
 };
 
 export default function ProductForm() {
+  const [categories, setCategories] = useState<any[]>([]);
+  const [stores, setStores] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [formData, setFormData] = useState<FormData>(INITIAL_DATA);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    const fetchMetadata = async () => {
+      try {
+        const [catData, storeData] = await Promise.all([
+          authApi.getCategories(),
+          authApi.getStores(),
+        ]);
+        setCategories(catData.results || []);
+        setStores(storeData.results.map((s: any) => ({ 
+          id: s.id, 
+          name: s.store_name 
+        })) || []);
+      } catch (error) {
+        console.error('Error fetching metadata:', error);
+        toast.error('Failed to load stores and categories');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchMetadata();
+  }, []);
 
   const handleBasicInfoChange = (field: string, value: string | File) => {
     if (value instanceof File) {
@@ -85,7 +93,8 @@ export default function ProductForm() {
       reader.onloadend = () => {
         setFormData((prev) => ({
           ...prev,
-          [field]: reader.result as string,
+          uploadedImage: reader.result as string,
+          uploadedFile: value,
         }));
       };
       reader.readAsDataURL(value);
@@ -108,6 +117,18 @@ export default function ProductForm() {
     e.preventDefault();
     if (isSubmitting) return;
 
+    if (!formData.productName.trim()) {
+      toast.error('Product name is required');
+      return;
+    }
+    if (!formData.originalPrice.trim()) {
+      toast.error('Original price is required');
+      return;
+    }
+    if (!formData.dealPrice.trim()) {
+      toast.error('Deal price is required');
+      return;
+    }
     if (!formData.categoryId) {
       toast.error('Please select a category');
       return;
@@ -115,39 +136,64 @@ export default function ProductForm() {
 
     setIsSubmitting(true);
     try {
-      const payload: any = {
-        name: formData.productName,
-        category: parseInt(formData.categoryId),
-        product_store: formData.storeId ? [parseInt(formData.storeId)] : [],
-        origin_price: formData.originalPrice || "0.00",
-        discount_price: formData.dealPrice || "0.00",
-        sku: formData.upcSku || "",
-        stock: parseInt(formData.quantityAvailable) || 0,
-        deal_type: formData.dealType,
-        additional_comment: formData.additionalComments,
-        description: formData.locationNotes || "",
-      };
+      const originPrice = parseFloat(formData.originalPrice) || 0;
+      const discountPrice = parseFloat(formData.dealPrice) || 0;
+      const discountPercentage = originPrice > 0 ? ((originPrice - discountPrice) / originPrice) * 100 : 0;
+      const dollarOff = (originPrice - discountPrice).toFixed(2);
 
-      if (formData.expiryDate) {
-        payload.expire_date = new Date(formData.expiryDate).toISOString();
+      const formPayload = new FormData();
+      formPayload.append('name', formData.productName);
+      formPayload.append('category_id', formData.categoryId);
+      formPayload.append('origin_price', formData.originalPrice || "0.00");
+      formPayload.append('discount_price', formData.dealPrice || "0.00");
+      formPayload.append('discount_percentage', discountPercentage.toFixed(2));
+      formPayload.append('dollar_off', dollarOff);
+      formPayload.append('sku', formData.upcSku || "");
+      formPayload.append('stock', (parseInt(formData.quantityAvailable) || 0).toString());
+      formPayload.append('product_store_type', formData.storeType);
+      formPayload.append('deal_type', formData.dealType);
+      formPayload.append('expire_date', formData.expiryDate ? new Date(formData.expiryDate).toISOString() : "");
+      formPayload.append('additional_comment', formData.additionalComments);
+      formPayload.append('products_links', formData.productLink || "");
+      formPayload.append('upc_field', formData.upcSku || "");
+
+      if (formData.uploadedFile) {
+        formPayload.append('product_image', formData.uploadedFile);
+      } else if (formData.uploadedImage) {
+        formPayload.append('image_url', formData.uploadedImage);
       }
 
       if (formData.storeType === 'online') {
-        payload.products_links = formData.productLink;
-        await authApi.createOnlineProduct(payload);
+        await authApi.createOnlineProduct(formPayload);
       } else {
-        payload.description = `
+        const fullDescription = `
 Address: ${formData.storeAddress}
 ZIP: ${formData.zipCode}
 Aisle: ${formData.aisleSection}
 Notes: ${formData.locationNotes}
 `.trim();
-        await authApi.createInStoreProduct(payload);
+        formPayload.append('description', fullDescription);
+        await authApi.createInStoreProduct(formPayload);
       }
 
       toast.success('Deal published successfully!');
       setFormData(INITIAL_DATA);
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Submission error:', error);
+      
+      // Attempt to show detailed error from backend if available
+      if (error && typeof error === 'object') {
+        const errorMessages = Object.entries(error)
+          .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : value}`)
+          .join(' | ');
+        
+        if (errorMessages) {
+          toast.error(`Validation Error: ${errorMessages}`);
+          setIsSubmitting(false);
+          return;
+        }
+      }
+
       if (error instanceof Error && error.message !== 'Unauthorized') {
         toast.error('Failed to publish deal');
       }
@@ -206,8 +252,8 @@ Notes: ${formData.locationNotes}
               else if (field === 'category') handleBasicInfoChange('categoryId', value);
               else handleBasicInfoChange(field, value);
             }} 
-            stores={STORES}
-            categories={CATEGORIES}
+            stores={stores}
+            categories={categories}
           />
 
           {formData.storeType === 'online' ? (
@@ -231,7 +277,7 @@ Notes: ${formData.locationNotes}
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Category</span>
                 <span className="font-semibold text-foreground">
-                  {CATEGORIES.find((c: any) => String(c.id) === formData.categoryId)?.name || 'Not selected'}
+                  {categories.find((c: any) => String(c.id) === formData.categoryId)?.name || 'Not selected'}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
