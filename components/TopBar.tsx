@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { Menu, Bell, Search } from "lucide-react";
 
 interface TopBarProps {
@@ -5,7 +6,18 @@ interface TopBarProps {
 }
 
 export default function TopBar({ onMenuClick }: TopBarProps) {
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    const storedUser = localStorage.getItem("user");
+    if (storedUser) {
+      try {
+        setUser(JSON.parse(storedUser));
+      } catch (e) {
+        console.error("Error parsing user from localStorage", e);
+      }
+    }
+  }, []);
 
   return (
     <div className="h-16 bg-card border-b border-border flex items-center justify-between px-4 md:px-8 sticky top-0 z-30">
