@@ -5,6 +5,8 @@ interface TopBarProps {
 }
 
 export default function TopBar({ onMenuClick }: TopBarProps) {
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
+
   return (
     <div className="h-16 bg-card border-b border-border flex items-center justify-between px-4 md:px-8 sticky top-0 z-30">
       <div className="flex items-center gap-4 flex-1">
@@ -26,17 +28,22 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
 
         <div className="flex items-center gap-3 pl-4 md:pl-6 border-l border-border">
           <div className="hidden sm:block text-right">
-            <p className="text-sm font-bold text-foreground">Admin User</p>
+            <p className="text-sm font-bold text-foreground">
+              {user?.full_name || "Admin User"}
+            </p>
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">
-              Super Admin
+              {user?.role || "Super Admin"}
             </p>
           </div>
           <div className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center shadow-sm p-1 border border-border">
-            <img src="/logo.svg" alt="Avatar" className="w-full h-full object-contain rounded-sm" />
+            <img
+              src={user?.profile_picture || "/logo.svg"}
+              alt="Avatar"
+              className="w-full h-full object-contain rounded-sm"
+            />
           </div>
         </div>
       </div>
     </div>
   );
 }
-

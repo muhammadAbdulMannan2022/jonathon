@@ -113,7 +113,16 @@ export default function Sidebar({ currentPage, onPageChange }: SidebarProps) {
       </nav>
 
       <div className="p-4 mt-auto border-t border-border">
-        <button className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all duration-200 group">
+        <button 
+          onClick={() => {
+            localStorage.removeItem("access_token");
+            localStorage.removeItem("refresh_token");
+            localStorage.removeItem("user");
+            document.cookie = "access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
+            window.location.href = "/auth/login";
+          }}
+          className="w-full flex items-center gap-3 px-4 py-3 hover:cursor-pointer rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all duration-200 group"
+        >
           <LogOut className="w-5 h-5 transition-transform duration-200 group-hover:-translate-x-1" />
           <span className="font-bold text-sm">Sign Out</span>
         </button>

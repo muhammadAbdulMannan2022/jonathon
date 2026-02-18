@@ -1,118 +1,97 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { authApi } from "@/lib/auth-service";
+import { toast } from "sonner";
+import { Loader2, Search, Trash2, Ban, CheckCircle, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface User {
   id: number;
-  name: string;
+  full_name: string | null;
   email: string;
   role: string;
-  status: "active" | "inactive";
-  joinDate: string;
-  products: number;
+  user_product_count: number;
+  date_joined: string;
+  is_active: boolean;
 }
 
 export default function UserControl() {
-  const [users, setUsers] = useState<User[]>([
-    {
-      id: 1,
-      name: "John Doe",
-      email: "john@example.com",
-      role: "Seller",
-      status: "active",
-      joinDate: "2024-01-15",
-      products: 12,
-    },
-    {
-      id: 2,
-      name: "Jane Smith",
-      email: "jane@example.com",
-      role: "Seller",
-      status: "active",
-      joinDate: "2024-02-20",
-      products: 8,
-    },
-    {
-      id: 3,
-      name: "Bob Johnson",
-      email: "bob@example.com",
-      role: "Buyer",
-      status: "inactive",
-      joinDate: "2023-12-10",
-      products: 0,
-    },
-    {
-      id: 4,
-      name: "Alice Williams",
-      email: "alice@example.com",
-      role: "Seller",
-      status: "active",
-      joinDate: "2024-03-05",
-      products: 15,
-    },
-    {
-      id: 5,
-      name: "Charlie Brown",
-      email: "charlie@example.com",
-      role: "Buyer",
-      status: "active",
-      joinDate: "2024-01-22",
-      products: 0,
-    },
-  ]);
-
+  const [users, setUsers] = useState<User[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterRole, setFilterRole] = useState("all");
-  const [filterStatus, setFilterStatus] = useState("all");
-  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [hasNext, setHasNext] = useState<string | null>(null);
+  const [hasPrevious, setHasPrevious] = useState<string | null>(null);
 
-  const filteredUsers = users.filter((user) => {
-    const matchSearch =
-      user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchRole = filterRole === "all" || user.role === filterRole;
-    const matchStatus = filterStatus === "all" || user.status === filterStatus;
-    return matchSearch && matchRole && matchStatus;
-  });
-
-  const toggleStatus = (userId: number) => {
-    setUsers(
-      users.map((user) =>
-        user.id === userId
-          ? {
-              ...user,
-              status: user.status === "active" ? "inactive" : "active",
-            }
-          : user,
-      ),
-    );
+  const fetchUsers = async () => {
+    setIsLoading(true);
+    try {
+      const response = await authApi.getUsers(currentPage, searchTerm);
+      setUsers(response.results);
+      setTotalCount(response.count);
+      setHasNext(response.next);
+      setHasPrevious(response.previous);
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      toast.error("Failed to load users");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const deleteUser = (userId: number) => {
-    setUsers(users.filter((user) => user.id !== userId));
+  useEffect(() => {
+    // Debounce search
+    const timer = setTimeout(() => {
+      fetchUsers();
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [currentPage, searchTerm]);
+
+  const handleAction = async (action: 'suspend' | 'reactivate' | 'delete', userId: number) => {
+    try {
+      if (action === 'suspend') {
+        await authApi.suspendUser(userId);
+        toast.success("User suspended successfully");
+      } else if (action === 'reactivate') {
+        await authApi.reactivateUser(userId);
+        toast.success("User reactivated successfully");
+      } else if (action === 'delete') {
+        if (!confirm("Are you sure you want to delete this user?")) return;
+        await authApi.deleteUser(userId);
+        toast.success("User deleted successfully");
+      }
+      fetchUsers(); // Refresh list
+    } catch (error) {
+      console.error(`Error performing ${action}:`, error);
+      toast.error(`Failed to ${action} user`);
+    }
   };
 
   return (
-    <div>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-foreground">User Management</h1>
-        <p className="text-muted-foreground mt-2">
-          View, edit, and manage all users
-        </p>
+    <div className="space-y-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">User Management</h1>
+          <p className="text-muted-foreground mt-1">
+            View and manage user accounts, roles, and statuses.
+          </p>
+        </div>
       </div>
 
-      <div className="bg-card border border-border rounded-lg p-6 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-2">
-              Search Users
-            </label>
+      <div className="bg-card border border-border rounded-lg shadow-sm">
+        <div className="p-6 border-b border-border">
+          <div className="relative max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
               type="text"
-              placeholder="Search by name or email..."
+              placeholder="Search by email..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full px-4 py-2 rounded-lg bg-muted border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1); // Reset to first page on search
+              }}
+              className="w-full pl-10 pr-4 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
             />
           </div>
         </div>
@@ -120,96 +99,119 @@ export default function UserControl() {
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-border">
-                <th className="text-left py-3 px-4 text-sm font-semibold text-foreground">
-                  Name
-                </th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-foreground">
-                  Email
-                </th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-foreground">
-                  Role
-                </th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-foreground">
-                  Products
-                </th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-foreground">
-                  Status
-                </th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-foreground">
-                  Join Date
-                </th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-foreground">
-                  Actions
-                </th>
+              <tr className="bg-muted/50 border-b border-border">
+                <th className="text-left py-3 px-6 text-xs font-semibold text-muted-foreground uppercase tracking-wider">User</th>
+                <th className="text-left py-3 px-6 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Role</th>
+                <th className="text-left py-3 px-6 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Products</th>
+                <th className="text-left py-3 px-6 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
+                <th className="text-left py-3 px-6 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Joined</th>
+                <th className="text-right py-3 px-6 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
-            <tbody>
-              {filteredUsers.map((user) => (
-                <tr
-                  key={user.id}
-                  className="border-b border-border hover:bg-muted transition-colors"
-                >
-                  <td className="py-3 px-4">
-                    <p className="text-sm font-medium text-foreground">
-                      {user.name}
-                    </p>
-                  </td>
-                  <td className="py-3 px-4">
-                    <p className="text-sm text-muted-foreground">
-                      {user.email}
-                    </p>
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className="text-sm bg-muted text-foreground px-3 py-1 rounded">
-                      {user.role}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4">
-                    <p className="text-sm font-medium text-foreground">
-                      {user.products}
-                    </p>
-                  </td>
-                  <td className="py-3 px-4">
-                    <span
-                      className={`text-xs font-semibold px-3 py-1 rounded-full ${
-                        user.status === "active"
-                          ? "bg-primary/20 text-primary"
-                          : "bg-destructive/20 text-destructive"
-                      }`}
-                    >
-                      {user.status === "active" ? "Active" : "Inactive"}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4">
-                    <p className="text-sm text-muted-foreground">
-                      {user.joinDate}
-                    </p>
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => toggleStatus(user.id)}
-                        className="text-xs bg-primary/20 hover:bg-primary/30 text-primary px-3 py-1 rounded transition-colors"
-                      >
-                        {user.status === "active" ? "Deactivate" : "Activate"}
-                      </button>
-                      <button
-                        onClick={() => deleteUser(user.id)}
-                        className="text-xs bg-destructive/20 hover:bg-destructive/30 text-destructive px-3 py-1 rounded transition-colors"
-                      >
-                        Delete
-                      </button>
-                    </div>
+            <tbody className="divide-y divide-border">
+              {isLoading ? (
+                <tr>
+                  <td colSpan={6} className="py-20 text-center">
+                    <Loader2 className="w-8 h-8 text-primary animate-spin mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">Loading users...</p>
                   </td>
                 </tr>
-              ))}
+              ) : users.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-20 text-center text-muted-foreground">
+                    No users found matching your search.
+                  </td>
+                </tr>
+              ) : (
+                users.map((user) => (
+                  <tr key={user.id} className="hover:bg-muted/30 transition-colors">
+                    <td className="py-4 px-6">
+                      <div className="flex flex-col">
+                        <span className="font-medium text-foreground">{user.full_name || 'N/A'}</span>
+                        <span className="text-sm text-muted-foreground">{user.email}</span>
+                      </div>
+                    </td>
+                    <td className="py-4 px-6">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-secondary text-secondary-foreground">
+                        {user.role}
+                      </span>
+                    </td>
+                    <td className="py-4 px-6">
+                      <span className="text-sm font-medium text-foreground">{user.user_product_count}</span>
+                    </td>
+                    <td className="py-4 px-6">
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          user.is_active
+                            ? "bg-green-500/10 text-green-500"
+                            : "bg-red-500/10 text-red-500"
+                        }`}
+                      >
+                        {user.is_active ? "Active" : "Suspended"}
+                      </span>
+                    </td>
+                    <td className="py-4 px-6">
+                      <span className="text-sm text-muted-foreground">
+                        {new Date(user.date_joined).toLocaleDateString()}
+                      </span>
+                    </td>
+                    <td className="py-4 px-6 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        {user.is_active ? (
+                          <button
+                            onClick={() => handleAction('suspend', user.id)}
+                            className="p-2 text-orange-500 hover:bg-orange-500/10 rounded-md transition-colors"
+                            title="Suspend User"
+                          >
+                            <Ban className="w-4 h-4" />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleAction('reactivate', user.id)}
+                            className="p-2 text-green-500 hover:bg-green-500/10 rounded-md transition-colors"
+                            title="Reactivate User"
+                          >
+                            <CheckCircle className="w-4 h-4" />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleAction('delete', user.id)}
+                          className="p-2 text-red-500 hover:bg-red-500/10 rounded-md transition-colors"
+                          title="Delete User"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
 
-        <div className="mt-4 text-sm text-muted-foreground">
-          Showing {filteredUsers.length} of {users.length} users
+        {/* Pagination */}
+        <div className="p-4 border-t border-border flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            Showing <span className="font-medium">{users.length}</span> results
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={!hasPrevious}
+              className="p-2 border border-border rounded-md hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="text-sm font-medium px-2">Page {currentPage}</span>
+            <button
+              onClick={() => setCurrentPage((p) => p + 1)}
+              disabled={!hasNext}
+              className="p-2 border border-border rounded-md hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
     </div>

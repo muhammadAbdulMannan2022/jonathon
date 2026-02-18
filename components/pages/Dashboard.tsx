@@ -1,86 +1,64 @@
 'use client';
 
+import { useState, useEffect } from 'react';
+import { authApi } from '@/lib/auth-service';
+import { Users, CheckCircle, Package, XCircle, Loader2 } from 'lucide-react';
+
 export default function Dashboard() {
+  const [statsData, setStatsData] = useState<any>(null);
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
+  const [quickStats, setQuickStats] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setIsLoading(true);
+      try {
+        const [stats, activity, quick] = await Promise.all([
+          authApi.getDashboardStats(),
+          authApi.getRecentActivity(),
+          authApi.getQuickStats(),
+        ]);
+        setStatsData(stats);
+        setRecentActivity(activity.results?.slice(0, 5) || []);
+        setQuickStats(quick);
+      } catch (error) {
+        console.error('Dashboard data fetch error:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
   const stats = [
     {
       title: 'Total Users',
-      value: '1,234',
-      change: '+12%',
-      icon: (
-        <svg
-          className="w-8 h-8"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M17 20h5v-2a3 3 0 00-5.856-1.487M15 10a3 3 0 11-6 0 3 3 0 016 0zM4 20h16a2 2 0 002-2v-2a3 3 0 00-3-3H5a3 3 0 00-3 3v2a2 2 0 002 2z"
-          />
-        </svg>
-      ),
+      value: statsData?.total_users?.count ?? '...',
+      change: statsData?.total_users?.label ?? '...',
+      color: 'text-blue-500',
+      icon: <Users className="w-8 h-8" />,
     },
     {
       title: 'Pending Approvals',
-      value: '45',
-      change: '+8',
-      icon: (
-        <svg
-          className="w-8 h-8"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-          />
-        </svg>
-      ),
+      value: statsData?.pending_approvals?.count ?? '...',
+      change: statsData?.pending_approvals?.label ?? '...',
+      color: 'text-yellow-500',
+      icon: <CheckCircle className="w-8 h-8" />,
     },
     {
       title: 'Active Products',
-      value: '892',
-      change: '+23%',
-      icon: (
-        <svg
-          className="w-8 h-8"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M20 7l-8-4-8 4m0 0l8 4m-8-4v10l8 4m0-10l8 4m-8-4v10M4 12l8 4m8-4l-8-4"
-          />
-        </svg>
-      ),
+      value: statsData?.active_products?.count ?? '...',
+      change: statsData?.active_products?.label ?? '...',
+      color: 'text-primary',
+      icon: <Package className="w-8 h-8" />,
     },
     {
       title: 'Rejected Items',
-      value: '12',
-      change: '-2',
-      icon: (
-        <svg
-          className="w-8 h-8"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M6 18L18 6M6 6l12 12"
-          />
-        </svg>
-      ),
+      value: statsData?.rejected_items?.count ?? '...',
+      change: statsData?.rejected_items?.label ?? '...',
+      color: 'text-destructive',
+      icon: <XCircle className="w-8 h-8" />,
     },
   ];
 
@@ -97,108 +75,129 @@ export default function Dashboard() {
         {stats.map((stat, index) => (
           <div
             key={index}
-            className="bg-card border border-border rounded-lg p-6 hover:border-accent transition-colors"
+            className="bg-card border border-border rounded-2xl p-6 hover:shadow-lg transition-all"
           >
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-sm text-muted-foreground mb-2">
+                <p className="text-sm font-bold text-muted-foreground mb-2 uppercase tracking-widest">
                   {stat.title}
                 </p>
-                <p className="text-2xl font-bold text-foreground">
-                  {stat.value}
-                </p>
+                <div className="flex items-center gap-2">
+                  {isLoading ? (
+                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                  ) : (
+                    <p className="text-3xl font-black text-foreground">
+                      {stat.value}
+                    </p>
+                  )}
+                </div>
               </div>
-              <div className="text-accent">{stat.icon}</div>
+              <div className={stat.color}>{stat.icon}</div>
             </div>
-            <p className="text-sm text-primary mt-4 font-medium">
-              {stat.change} from last month
+            <p className="text-xs text-primary mt-4 font-bold bg-primary/10 w-fit px-2 py-1 rounded-full">
+              {stat.change}
             </p>
           </div>
         ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-card border border-border rounded-lg p-6">
-          <h2 className="text-lg font-bold text-foreground mb-4">
+        <div className="lg:col-span-2 bg-card border border-border rounded-2xl p-6 shadow-sm">
+          <h2 className="text-lg font-bold text-foreground mb-6 flex items-center gap-2">
             Recent Activity
+            <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-full">Live Updates</span>
           </h2>
           <div className="space-y-4">
-            {[
-              {
-                action: 'New product submitted',
-                user: 'John Doe',
-                time: '2 hours ago',
-              },
-              {
-                action: 'User account created',
-                user: 'Jane Smith',
-                time: '4 hours ago',
-              },
-              {
-                action: 'Product approved',
-                user: 'Admin',
-                time: '6 hours ago',
-              },
-              {
-                action: 'User deactivated',
-                user: 'Admin',
-                time: '1 day ago',
-              },
-            ].map((item, index) => (
-              <div
-                key={index}
-                className="flex items-center justify-between py-3 border-b border-border last:border-b-0"
-              >
-                <div>
-                  <p className="text-sm font-medium text-foreground">
-                    {item.action}
-                  </p>
-                  <p className="text-xs text-muted-foreground">{item.user}</p>
-                </div>
-                <p className="text-xs text-muted-foreground">{item.time}</p>
+            {isLoading ? (
+              <div className="flex justify-center py-10">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
               </div>
-            ))}
+            ) : recentActivity.length > 0 ? (
+              recentActivity.map((item, index) => (
+                <div
+                  key={index}
+                  className="flex items-center justify-between py-4 border-b border-border last:border-b-0 hover:bg-muted/30 transition-colors px-2 rounded-lg"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className={`w-2 h-2 rounded-full ${
+                      item.status === 'success' ? 'bg-primary' : 
+                      item.status === 'warning' ? 'bg-yellow-500' : 'bg-destructive'
+                    }`} />
+                    <div>
+                      <p className="text-sm font-bold text-foreground leading-tight">
+                        {item.details}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {item.user_email} • {item.action.replace('_', ' ')} • {item.ip_address}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase">
+                    {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </div>
+              ))
+            ) : (
+              <p className="text-center py-10 text-muted-foreground text-sm">No recent activity found.</p>
+            )}
           </div>
         </div>
 
-        <div className="bg-card border border-border rounded-lg p-6">
-          <h2 className="text-lg font-bold text-foreground mb-4">
+        <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
+          <h2 className="text-lg font-bold text-foreground mb-6">
             Quick Stats
           </h2>
-          <div className="space-y-4">
-            <div>
-              <div className="flex justify-between mb-2">
-                <span className="text-sm text-muted-foreground">
-                  Approval Rate
-                </span>
-                <span className="text-sm font-bold text-foreground">85%</span>
+          <div className="space-y-6">
+            {isLoading ? (
+              <div className="flex justify-center py-10">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
               </div>
-              <div className="w-full bg-muted rounded-full h-2">
-                <div className="bg-primary h-2 rounded-full w-4/5"></div>
-              </div>
-            </div>
-            <div>
-              <div className="flex justify-between mb-2">
-                <span className="text-sm text-muted-foreground">
-                  User Growth
-                </span>
-                <span className="text-sm font-bold text-foreground">12%</span>
-              </div>
-              <div className="w-full bg-muted rounded-full h-2">
-                <div className="bg-accent h-2 rounded-full w-3/12"></div>
-              </div>
-            </div>
-            <div>
-              <div className="flex justify-between mb-2">
-                <span className="text-sm text-muted-foreground">
-                  Product Quality
-                </span>
-                <span className="text-sm font-bold text-foreground">92%</span>
-              </div>
-              <div className="w-full bg-muted rounded-full h-2">
-                <div className="bg-primary h-2 rounded-full w-11/12"></div>
-              </div>
-            </div>
+            ) : (
+              <>
+                <div>
+                  <div className="flex justify-between mb-2">
+                    <span className="text-sm font-bold text-muted-foreground uppercase tracking-widest">
+                      Approval Rate
+                    </span>
+                    <span className="text-sm font-black text-primary">{quickStats?.approval_rate ?? 0}%</span>
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
+                    <div 
+                      className="bg-primary h-full rounded-full transition-all duration-500" 
+                      style={{ width: `${quickStats?.approval_rate ?? 0}%` }}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <div className="flex justify-between mb-2">
+                    <span className="text-sm font-bold text-muted-foreground uppercase tracking-widest">
+                      User Growth
+                    </span>
+                    <span className="text-sm font-black text-accent">{quickStats?.user_growth ?? 0}%</span>
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
+                    <div 
+                      className="bg-accent h-full rounded-full transition-all duration-500" 
+                      style={{ width: `${quickStats?.user_growth ?? 0}%` }}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <div className="flex justify-between mb-2">
+                    <span className="text-sm font-bold text-muted-foreground uppercase tracking-widest">
+                      Product Quality
+                    </span>
+                    <span className="text-sm font-black text-primary">{quickStats?.product_quality ?? 0}%</span>
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
+                    <div 
+                      className="bg-primary h-full rounded-full transition-all duration-500" 
+                      style={{ width: `${quickStats?.product_quality ?? 0}%` }}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>

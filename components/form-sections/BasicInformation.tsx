@@ -1,26 +1,5 @@
 'use client';
 
-const STORES = [
-  'Amazon',
-  'Best Buy',
-  'Target',
-  'Foot Locker',
-  'Apple',
-  'Nike',
-  'GameStop',
-];
-
-const CATEGORIES = [
-  'Electronics',
-  'Gaming',
-  'Shoes',
-  'Clothing',
-  'Home',
-  'Sports',
-  'Beauty',
-  'Books',
-];
-
 import { ChevronDown, Calendar, Tag, Package, Barcode, DollarSign } from 'lucide-react';
 
 interface BasicInformationProps {
@@ -36,11 +15,15 @@ interface BasicInformationProps {
     expiryDate: string;
   };
   onChange: (field: string, value: string) => void;
+  stores: any[];
+  categories: any[];
 }
 
 export default function BasicInformation({
   formData,
   onChange,
+  stores,
+  categories,
 }: BasicInformationProps) {
   return (
     <div className="bg-card border border-border rounded-lg p-6 shadow-sm">
@@ -52,7 +35,7 @@ export default function BasicInformation({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Store Name */}
+        {/* Store Name (using storeId but labeling it Store Name) */}
         <div className="space-y-2">
           <label className="text-sm font-semibold text-foreground">
             Store Name <span className="text-destructive">*</span>
@@ -64,9 +47,9 @@ export default function BasicInformation({
               className="w-full pl-4 pr-10 py-2.5 bg-background border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-foreground"
             >
               <option value="">Select store</option>
-              {STORES.map((store) => (
-                <option key={store} value={store}>
-                  {store}
+              {stores.map((store) => (
+                <option key={store.id} value={store.id}>
+                  {store.name}
                 </option>
               ))}
             </select>
@@ -181,9 +164,9 @@ export default function BasicInformation({
               className="w-full pl-4 pr-10 py-2.5 bg-background border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-foreground"
             >
               <option value="">Select category</option>
-              {CATEGORIES.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.name}
                 </option>
               ))}
             </select>
